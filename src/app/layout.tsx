@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import './globals.css';
 
@@ -13,9 +14,10 @@ export const viewport: Viewport = {
   themeColor: '#f8f7f4',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = (await cookies()).get('sakan_locale')?.value === 'en' ? 'en' : 'ar';
   return (
-    <html lang="ar" dir="rtl">
+    <html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <body>{children}</body>
     </html>
   );

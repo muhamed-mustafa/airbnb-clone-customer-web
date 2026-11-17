@@ -12,7 +12,7 @@ const claims = (token: string): Claims | undefined => {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ action: string }> }) {
   const origin = request.headers.get('origin');
-  if (origin && origin !== request.nextUrl.origin) {
+  if (origin && origin !== (process.env.APP_ORIGIN ?? request.nextUrl.origin)) {
     return NextResponse.json({ message: 'Request origin is not allowed.' }, { status: 403 });
   }
 

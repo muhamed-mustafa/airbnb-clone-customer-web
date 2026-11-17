@@ -7,13 +7,33 @@ const parseClaims = (token: string): Claims | undefined => {
   catch { return undefined; }
 };
 
+function isCustomerOperation(method: string, segments: string[]) {
+  const path = segments.join('/');
+  const objectId = '[a-fA-F0-9]{24}';
+  if (method === 'GET') {
+    return ['auth/me', 'countries', 'cities', 'unit-categories', 'units', 'units/me',
+      'bookings/me', 'bookings/check-availability'].includes(path) ||
+      new RegExp('^units/' + objectId + '$').test(path) ||
+      new RegExp('^bookings/' + objectId + '$').test(path);
+  }
+  if (method === 'POST') return path === 'units' || path === 'bookings';
+  if (method === 'PATCH') {
+    return new RegExp('^units/' + objectId + '$').test(path) ||
+      new RegExp('^units/' + objectId + '/(activate|deactivate)$').test(path);
+  }
+  return method === 'DELETE' && new RegExp('^units/' + objectId + '$').test(path);
+}
+
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  if (!isCustomerOperation(request.method, path)) {
+    return NextResponse.json({ message: 'This operation is not available.' }, { status: 404 });
+  }
   const endpoint = '/' + path.join('/');
   const method = request.method;
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const origin = request.headers.get('origin');
-  if (isWrite && origin && origin !== request.nextUrl.origin) {
+  if (isWrite && origin && origin !== (process.env.APP_ORIGIN ?? request.nextUrl.origin)) {
     return NextResponse.json({ message: 'Request origin is not allowed.' }, { status: 403 });
   }
 
