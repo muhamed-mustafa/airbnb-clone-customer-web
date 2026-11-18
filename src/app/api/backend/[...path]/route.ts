@@ -33,7 +33,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const method = request.method;
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const origin = request.headers.get('origin');
-  if (isWrite && origin && origin !== (process.env.APP_ORIGIN ?? request.nextUrl.origin)) {
+  if (isWrite && origin && origin !== request.nextUrl.origin && origin !== process.env.APP_ORIGIN) {
     return NextResponse.json({ message: 'Request origin is not allowed.' }, { status: 403 });
   }
 
@@ -51,7 +51,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   let upstream: Response;
   try {
     upstream = await fetch(url, {
-      method, headers, body, cache: 'no-store', signal: AbortSignal.timeout(10000),
+      method, headers, body, cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
     });
   } catch {
     return NextResponse.json({ message: 'The service is temporarily unavailable.' }, { status: 503 });
@@ -66,7 +66,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token: session.refreshToken }),
         cache: 'no-store',
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
       });
       if (refreshed.ok) {
         const refreshBody = await refreshed.json() as { data?: unknown };
@@ -77,7 +77,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
           if (access?.role === 'user' && access.id === session.userId && typeof access.exp === 'number' && typeof refresh?.exp === 'number') {
             updatedSession = { ...session, accessToken: pair.accessToken, refreshToken: pair.refreshToken, accessExp: access.exp, refreshExp: refresh.exp };
             headers.set('authorization', 'Bearer ' + pair.accessToken);
-            upstream = await fetch(url, { method, headers, body, cache: 'no-store', signal: AbortSignal.timeout(10000) });
+            upstream = await fetch(url, { method, headers, body, cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
           }
         }
       } else if (refreshed.status === 401) {
