@@ -11,13 +11,14 @@ function isCustomerOperation(method: string, segments: string[]) {
   const path = segments.join('/');
   const objectId = '[a-fA-F0-9]{24}';
   if (method === 'GET') {
-    return ['auth/me', 'countries', 'cities', 'unit-categories', 'units', 'units/me',
+    return ['auth/me', 'users/me', 'countries', 'cities', 'unit-categories', 'units', 'units/me',
       'bookings/me', 'bookings/check-availability'].includes(path) ||
       new RegExp('^units/' + objectId + '$').test(path) ||
       new RegExp('^bookings/' + objectId + '$').test(path);
   }
-  if (method === 'POST') return path === 'units' || path === 'bookings';
+  if (method === 'POST') return path === 'units' || path === 'bookings' || path === 'auth/logout' || path === 'files/images/batch';
   if (method === 'PATCH') {
+    if (path === 'users/me' || path === 'auth/me/password') return true;
     return new RegExp('^units/' + objectId + '$').test(path) ||
       new RegExp('^units/' + objectId + '/(activate|deactivate)$').test(path);
   }
@@ -46,12 +47,12 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const session = await readSession();
   if (session) headers.set('authorization', 'Bearer ' + session.accessToken);
   if (isWrite) headers.set('content-type', request.headers.get('content-type') ?? 'application/json');
-  const body = isWrite ? await request.text() : undefined;
+  const body = isWrite ? await request.arrayBuffer() : undefined;
 
   let upstream: Response;
   try {
     upstream = await fetch(url, {
-      method, headers, body, cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
+      method, headers, body, cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(endpoint === '/files/images/batch' ? 30000 : 10000)]),
     });
   } catch {
     return NextResponse.json({ message: 'The service is temporarily unavailable.' }, { status: 503 });
@@ -77,7 +78,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
           if (access?.role === 'user' && access.id === session.userId && typeof access.exp === 'number' && typeof refresh?.exp === 'number') {
             updatedSession = { ...session, accessToken: pair.accessToken, refreshToken: pair.refreshToken, accessExp: access.exp, refreshExp: refresh.exp };
             headers.set('authorization', 'Bearer ' + pair.accessToken);
-            upstream = await fetch(url, { method, headers, body, cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
+            upstream = await fetch(url, { method, headers, body, cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(endpoint === '/files/images/batch' ? 30000 : 10000)]) });
           }
         }
       } else if (refreshed.status === 401) {

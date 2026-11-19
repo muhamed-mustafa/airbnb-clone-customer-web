@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
     });
     return response;
   }
-  if (action !== 'login' && action !== 'register') {
+  if (action !== 'login' && action !== 'register' && action !== 'activate') {
     return NextResponse.json({ message: 'Not found.' }, { status: 404 });
   }
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
 
   let upstream: Response;
   try {
-    upstream = await fetch(new URL('/api/auth/' + action, process.env.API_BASE_URL ?? 'http://localhost:3000'), {
+    upstream = await fetch(new URL(action === 'activate' ? '/api/auth/activation/verify' : '/api/auth/' + action, process.env.API_BASE_URL ?? 'http://localhost:3000'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'accept-language': request.headers.get('accept-language') ?? 'ar' },
       body: JSON.stringify(body),
@@ -49,6 +49,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
 
   const payload: unknown = await upstream.json().catch(() => ({}));
   if (!upstream.ok) return NextResponse.json(payload, { status: upstream.status });
+  if (action === 'register') return NextResponse.json(payload, { status: upstream.status });
   const envelope = payload as { data?: unknown };
   const tokens = (envelope.data ?? payload) as { accessToken?: unknown; refreshToken?: unknown };
   if (typeof tokens.accessToken !== 'string' || typeof tokens.refreshToken !== 'string') {

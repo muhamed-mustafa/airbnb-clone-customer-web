@@ -1,6 +1,6 @@
-# Sakan Customer Web
+# ULFA Customer Web
 
-A bilingual customer web app for exploring stays, requesting bookings, and managing guest or host activity.
+ULFA (أُلفة) is a bilingual stay-booking app for exploring places, requesting bookings, and managing guest or host activity.
 
 ## Local development
 

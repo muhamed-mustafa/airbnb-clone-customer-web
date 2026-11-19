@@ -8,14 +8,16 @@ const arabic = IBM_Plex_Sans_Arabic({ subsets: ['arabic'], weight: ['400', '500'
 const latin = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-latin' });
 
 export const metadata: Metadata = {
-  title: 'Rihal — a place for every journey',
-  description: 'Find a stay that feels right for your next journey.',
+  title: 'ULFA | أُلفة — مكان تحسّه مكانك',
+  description: 'Discover places that feel like yours. Explore stays and book with confidence on ULFA.',
+  applicationName: 'ULFA',
+  openGraph: { title: 'ULFA | أُلفة', description: 'مكان تحسّه مكانك. Find a place that feels like yours.', type: 'website' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#f8f7f4',
+  themeColor: '#f7f5f1',
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

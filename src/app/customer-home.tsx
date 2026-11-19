@@ -1,6 +1,9 @@
 'use client';
 
 import { preloadSmartImage, SmartImage } from '../components/smart-image';
+import { BrandMark } from '../components/brand-mark';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { displayUnitDescription, displayUnitTitle, formatBedrooms, formatDate, formatGuests, formatMoney, formatNumber, formatStayCount, isPreviewUnit, localizeReference } from '../lib/formatting';
 import type { CountryCode, getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js';
@@ -18,6 +21,9 @@ type Booking = {
   adultsCount?: number; kidsCount?: number; notes?: string; cancellationReason?: string;
 };
 type Ref = { id: string; name: string };
+type CityRef = Ref & { country: string };
+type ListingImage = { file: File; preview: string };
+type UserProfile = { id: string; name: string; email: string; phone: string };
 type PageResult<T> = { data: T[]; total: number; page: number; limit: number; hasNextPage: boolean };
 type Estimate = { available: boolean; daysCount: number; pricePerDay: number; vat: number; bookingAmount: number; vatAmount: number; totalAmount: number };
 type Locale = 'ar' | 'en';
@@ -32,10 +38,10 @@ type SearchParams = Partial<Record<'where' | 'minPrice' | 'maxPrice' | 'unitCate
 
 const words = {
   ar: {
-    heroImageAlt: 'إقامة مصممة بعناية في ضوء الصباح', heroKicker: 'رحلات تبدأ بقصة شخصية', heroCaption: 'مكان تعود إليه من جديد', curated: 'مختارة لرحلتك القادمة', journalKicker: 'حكاية رحلاتك', hostKicker: 'شارك مكانًا تحبه', hostFormKicker: 'كل إقامة جيدة تبدأ بقصة جميلة', newStay: 'إقامة جديدة',
-    brand: 'رِحال', tagline: 'لكل رحلة مكان', explore: 'اكتشف الإقامات', trips: 'رحلاتي', navigation: 'التنقل الرئيسي',
-    host: 'كن مضيفًا', account: 'تسجيل الدخول', search: 'ابحث عن مكان', where: 'إلى أين؟',
-    dates: 'التواريخ', guests: 'الضيوف', homes: 'إقامات مختارة', stays: 'إقامة',
+    heroImageAlt: 'إقامة مصممة بعناية في ضوء الصباح', heroKicker: 'إقامة تشبهك', heroCaption: 'مكان تعود إليه من جديد', curated: 'أماكن لإقامتك القادمة', journalKicker: 'حكاية رحلاتك', hostKicker: 'شارك مكانًا تحبه', hostFormKicker: 'كل إقامة جيدة تبدأ بقصة جميلة', newStay: 'إقامة جديدة',
+    brand: 'أُلفة', tagline: 'مكان تحسّه مكانك', explore: 'اكتشف الإقامات', trips: 'رحلاتي', navigation: 'التنقل الرئيسي',
+    host: 'كن مضيفًا', account: 'تسجيل الدخول', profile: 'حسابي', accountMenu: 'قائمة الحساب', accountUnavailable: 'تعذر تحميل الحساب. حاول مجددًا.', signOutFailed: 'تعذر تسجيل الخروج الآن. حاول مجددًا.', search: 'ابحث عن مكان', where: 'إلى أين؟',
+    dates: 'التواريخ', guests: 'الضيوف', homes: 'أماكن للإقامة', stays: 'إقامة',
     night: 'لليلة', all: 'كل الإقامات', loadMore: '\u0639\u0631\u0636 \u0627\u0644\u0645\u0632\u064a\u062f \u0645\u0646 \u0627\u0644\u0625\u0642\u0627\u0645\u0627\u062a', moreResults: '\u0642\u062f \u062a\u0638\u0647\u0631 \u0625\u0642\u0627\u0645\u0627\u062a \u0623\u062e\u0631\u0649 \u0639\u0646\u062f \u0645\u062a\u0627\u0628\u0639\u0629 \u0627\u0644\u062a\u0635\u0641\u062d.', noResults: 'لم نعثر على إقامة مطابقة',
     noResultsHint: 'جرّب تغيير الوجهة أو توسيع نطاق السعر.', details: 'التفاصيل',
     bedrooms: 'غرف نوم', guestsCapacity: 'ضيوف', amenities: 'ما يقدمه المكان',
@@ -46,9 +52,9 @@ const words = {
     login: 'تسجيل الدخول', register: 'إنشاء حساب', name: 'الاسم الكامل', email: 'البريد الإلكتروني',
     password: 'كلمة المرور', countryCode: 'مفتاح الدولة', phone: 'رقم الهاتف',
     namePlaceholder: 'محمد مصطفى', emailPlaceholder: 'name@example.com', phonePlaceholder: '10 1234 5678', passwordPlaceholder: 'أدخل كلمة المرور', phoneHint: 'اكتب رقمك المحلي، وسنتحقق من توافقه مع مفتاح الدولة.', searchCountry: 'ابحث عن دولة أو مفتاح اتصال', noCountriesFound: 'لا توجد دولة مطابقة', phoneInvalid: 'رقم الهاتف لا يتوافق مع الدولة أو مفتاح الاتصال المختار.',
-    authWelcome: 'أهلًا بك في رِحال', authIntro: 'سجّل الدخول لمتابعة رحلتك، أو أنشئ حسابًا لتبدأ حكاية جديدة.',
-    authStoryTitle: 'رحلتك القادمة تبدأ بمكان مناسب.', authStoryBody: 'اكتشف إقامات مختارة بعناية، واحجز بثقة، واحتفظ بكل تفاصيل رحلتك في مكان واحد.',
-    authPrivacy: 'بياناتك محفوظة، وتجربتك تبدأ على راحتك.', authLoginSuccess: 'تم تسجيل الدخول بنجاح.', authRegisterSuccess: 'أُنشئ حسابك بنجاح. أهلًا بك في رِحال.',
+    authWelcome: 'أهلًا بك في أُلفة', authIntro: 'سجّل الدخول لإدارة إقاماتك، أو أنشئ حسابًا لتجد مكانك القادم.',
+    authStoryTitle: 'مكان جديد، وإحساس مألوف.', authStoryBody: 'اكتشف أماكن تناسبك، واحجز بثقة، وتابع تفاصيل إقامتك في مكان واحد.',
+    authPrivacy: 'بياناتك محفوظة، وتجربتك تبدأ على راحتك.', authLoginSuccess: 'تم تسجيل الدخول بنجاح.', authRegisterSuccess: 'أُنشئ حسابك بنجاح. أهلًا بك في أُلفة.',
     confirmPassword: 'تأكيد كلمة المرور', passwordHint: 'استخدم من 8 إلى 128 حرفًا.', passwordMismatch: 'كلمتا المرور غير متطابقتين.',
     showPassword: 'إظهار كلمة المرور', hidePassword: 'إخفاء كلمة المرور',
     nameRequired: 'أدخل اسمك الكامل.', nameLength: 'يجب أن يتراوح الاسم بين حرفين و50 حرفًا.',
@@ -61,7 +67,11 @@ const words = {
     saved: 'تم إرسال طلب الحجز بنجاح.', listingSaved: 'تم نشر وحدتك بنجاح.',
     tripsTitle: 'رحلاتك القادمة والسابقة', myPlaces: 'أماكني', addPlace: 'أضف مكانًا',
     createListing: 'أضف وحدتك', title: 'اسم الإقامة', description: 'وصف المكان',
-    address: 'العنوان', photoUrl: 'رابط صورة رئيسية', price: 'السعر لليلة',
+    address: 'العنوان', photoUrl: 'صور الإقامة', price: 'السعر لليلة',
+    titlePlaceholder: 'مثلًا: شقة هادئة بإطلالة على النيل', descriptionPlaceholder: 'صف ما يميز المكان، الأجواء، والتجهيزات المتاحة للضيف…', addressPlaceholder: 'الشارع، رقم المبنى، والحي', pricePlaceholder: 'مثلًا ١٥٠٠',
+    photoDrop: 'اضغط لاختيار صور الإقامة أو اسحبها هنا', photoHint: 'حتى ٥ صور JPG أو PNG أو WebP، بحد أقصى ٥ ميجابايت لكل صورة', photoCover: 'صورة الغلاف', photoMakeCover: 'اجعلها الغلاف', photoRemove: 'حذف الصورة', photoRequired: 'أضف صورة واحدة على الأقل قبل النشر.', photoLimit: 'يمكنك إضافة ٥ صور كحد أقصى.', photoType: 'اختر صور JPG أو PNG أو WebP فقط.', photoSize: 'يجب ألا يتجاوز حجم كل صورة ٥ ميجابايت.', uploadingPhotos: 'جارٍ رفع الصور…',
+    chooseCountryFirst: 'اختر الدولة أولًا', noCities: 'لا توجد مدن متاحة لهذه الدولة', cityForCountry: 'تظهر المدن التابعة للدولة التي تختارها فقط.',
+    listingIntro: 'أخبر ضيوفك عن المكان الذي سيحبون العودة إليه.', listingPlace: 'عن المكان', listingLocation: 'الموقع', listingDetails: 'تفاصيل الإقامة',
     country: 'الدولة', city: 'المدينة', category: 'نوع الإقامة', rooms: 'عدد الغرف', chooseOption: '\u0627\u062e\u062a\u0631', listingRequired: '\u0627\u062e\u062a\u0631 \u0627\u0644\u062f\u0648\u0644\u0629 \u0648\u0627\u0644\u0645\u062f\u064a\u0646\u0629 \u0648\u0646\u0648\u0639 \u0627\u0644\u0625\u0642\u0627\u0645\u0629 \u0642\u0628\u0644 \u0627\u0644\u0646\u0634\u0631.',
     internet: 'إنترنت', kitchen: 'مطبخ', garage: 'موقف خاص', publish: 'نشر الإقامة',
     close: 'إغلاق', filter: 'تصفية', maxPrice: 'أقصى سعر لليلة', minPrice: 'أقل سعر لليلة', loading: 'جارٍ التحميل…',
@@ -75,10 +85,10 @@ const words = {
     pauseListing: 'إيقاف العرض', activateListing: 'إعادة التفعيل', deleteListing: 'حذف الإقامة',
   },
   en: {
-    heroImageAlt: 'A thoughtfully designed stay in the morning light', heroKicker: 'Journeys, made personal', heroCaption: 'A place to come back to', curated: 'Curated for your next chapter', journalKicker: 'Your travel journal', hostKicker: 'Make room for something new', hostFormKicker: 'A good place starts with a good story', newStay: 'New stay',
-    brand: 'RIHAL', tagline: 'A place for every journey', explore: 'Explore stays', trips: 'My trips', navigation: 'Main navigation',
-    host: 'Become a host', account: 'Log in', search: 'Find a place', where: 'Where to?',
-    dates: 'Dates', guests: 'Guests', homes: 'Handpicked stays', stays: 'stays',
+    heroImageAlt: 'A thoughtfully designed stay in the morning light', heroKicker: 'Stay where you belong', heroCaption: 'A place to come back to', curated: 'Find your next place', journalKicker: 'Your travel journal', hostKicker: 'Make room for something new', hostFormKicker: 'A good place starts with a good story', newStay: 'New stay',
+    brand: 'ULFA', tagline: 'A place that feels like yours', explore: 'Explore stays', trips: 'My trips', navigation: 'Main navigation',
+    host: 'Become a host', account: 'Log in', profile: 'My account', accountMenu: 'Account menu', accountUnavailable: 'Could not load your account. Try again.', signOutFailed: 'Could not log out now. Try again.', search: 'Find a place', where: 'Where to?',
+    dates: 'Dates', guests: 'Guests', homes: 'Places to stay', stays: 'stays',
     night: 'night', all: 'All stays', loadMore: 'Show more stays', moreResults: 'There may be more stays on the next page.', noResults: 'No stays match your search',
     noResultsHint: 'Try changing the destination or widening your price range.', details: 'Details',
     bedrooms: 'bedrooms', guestsCapacity: 'guests', amenities: 'What this place offers',
@@ -89,9 +99,9 @@ const words = {
     login: 'Log in', register: 'Create account', name: 'Full name', email: 'Email address',
     password: 'Password', countryCode: 'Dial code', phone: 'Phone number',
     namePlaceholder: 'Muhammed Mustafa', emailPlaceholder: 'name@example.com', phonePlaceholder: '10 1234 5678', passwordPlaceholder: 'Enter your password', phoneHint: 'Enter your local number. We’ll check it against the selected country code.', searchCountry: 'Search country or calling code', noCountriesFound: 'No matching country', phoneInvalid: 'This phone number does not match the selected country code.',
-    authWelcome: 'Welcome to Rihal', authIntro: 'Log in to pick up where your journey left off, or create an account to begin a new one.',
-    authStoryTitle: 'Your next journey starts with the right place.', authStoryBody: 'Discover considered stays, book with confidence, and keep every detail of your trip in one place.',
-    authPrivacy: 'Your details stay private. Settle in at your own pace.', authLoginSuccess: 'You are now logged in.', authRegisterSuccess: 'Your account is ready. Welcome to Rihal.',
+    authWelcome: 'Welcome to ULFA', authIntro: 'Log in to manage your stays, or create an account to find your next place.',
+    authStoryTitle: 'A new place. A familiar feeling.', authStoryBody: 'Explore places that suit you, book with confidence, and keep your stay details together.',
+    authPrivacy: 'Your details stay private. Settle in at your own pace.', authLoginSuccess: 'You are now logged in.', authRegisterSuccess: 'Your account is ready. Welcome to ULFA.',
     confirmPassword: 'Confirm password', passwordHint: 'Use 8 to 128 characters.', passwordMismatch: 'Your passwords do not match.',
     showPassword: 'Show password', hidePassword: 'Hide password',
     nameRequired: 'Enter your full name.', nameLength: 'Name must be between 2 and 50 characters.',
@@ -104,7 +114,11 @@ const words = {
     saved: 'Your booking request was sent.', listingSaved: 'Your stay is now published.',
     tripsTitle: 'Your upcoming and past trips', myPlaces: 'My places', addPlace: 'Add a place',
     createListing: 'List your place', title: 'Listing title', description: 'Describe your place',
-    address: 'Street address', photoUrl: 'Cover photo URL', price: 'Price per night',
+    address: 'Street address', photoUrl: 'Stay photos', price: 'Price per night',
+    titlePlaceholder: 'e.g. A quiet apartment overlooking the Nile', descriptionPlaceholder: 'Describe the atmosphere, standout details, and what guests can expect…', addressPlaceholder: 'Street, building number, and neighborhood', pricePlaceholder: 'e.g. 1500',
+    photoDrop: 'Choose stay photos or drop them here', photoHint: 'Up to 5 JPG, PNG, or WebP images, 5 MB each', photoCover: 'Cover photo', photoMakeCover: 'Make cover', photoRemove: 'Remove photo', photoRequired: 'Add at least one photo before publishing.', photoLimit: 'You can add up to 5 photos.', photoType: 'Choose JPG, PNG, or WebP images only.', photoSize: 'Each image must be 5 MB or less.', uploadingPhotos: 'Uploading photos…',
+    chooseCountryFirst: 'Choose a country first', noCities: 'No cities are available for this country', cityForCountry: 'Only cities in the selected country are shown.',
+    listingIntro: 'Give guests a clear picture of the place they will call home.', listingPlace: 'The place', listingLocation: 'Location', listingDetails: 'Stay details',
     country: 'Country', city: 'City', category: 'Stay type', rooms: 'Bedrooms', chooseOption: 'Choose', listingRequired: 'Choose a country, city, and stay type before publishing.',
     internet: 'Wi-Fi', kitchen: 'Kitchen', garage: 'Private parking', publish: 'Publish listing',
     close: 'Close', filter: 'Filter', maxPrice: 'Max price per night', minPrice: 'Minimum price per night', loading: 'Loading…',
@@ -124,7 +138,7 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers: {
       'accept-language': typeof document === 'undefined' ? 'ar' : document.documentElement.lang,
-      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.body && !(options.body instanceof FormData) ? { 'content-type': 'application/json' } : {}),
       ...options.headers,
     },
     cache: 'no-store',
@@ -203,6 +217,7 @@ function countryFlag(code: string) {
 }
 
 export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = false, initialSearchParams = {} }: { initialLocale?: Locale; initialSignedIn?: boolean; initialSearchParams?: SearchParams }) {
+  const router = useRouter();
   const [locale, setLocale] = useState<Locale>(initialLocale);
   const [view, setView] = useState<'explore' | 'trips' | 'host'>('explore');
   const [units, setUnits] = useState<Unit[]>([]);
@@ -220,12 +235,18 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
   const [myUnits, setMyUnits] = useState<Unit[]>([]);
   const [party, setParty] = useState<'guest' | 'host'>('guest');
   const [countries, setCountries] = useState<Ref[]>([]);
-  const [cities, setCities] = useState<Ref[]>([]);
+  const [cities, setCities] = useState<CityRef[]>([]);
   const [categories, setCategories] = useState<Ref[]>([]);
   const [listingCountry, setListingCountry] = useState('');
   const [listingCity, setListingCity] = useState('');
   const [listingCategory, setListingCategory] = useState('');
   const [listingValidationAttempted, setListingValidationAttempted] = useState(false);
+  const [listingImages, setListingImages] = useState<ListingImage[]>([]);
+  const [listingPhotoError, setListingPhotoError] = useState('');
+  const [listingError, setListingError] = useState('');
+  const [listingPhase, setListingPhase] = useState<'upload' | 'publish' | null>(null);
+  const listingImageUrls = useRef(new Set<string>());
+  const listingPhotoInput = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<Unit | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [authOpen, setAuthOpen] = useState(false);
@@ -239,6 +260,11 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [authFieldErrors, setAuthFieldErrors] = useState<AuthFieldErrors>({});
   const [signedIn, setSignedIn] = useState(initialSignedIn);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState('');
+  const accountMenuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState(initialSearchParams.where ?? '');
   const [destinationOpen, setDestinationOpen] = useState(false);
   const [activeDestinationIndex, setActiveDestinationIndex] = useState(-1);
@@ -264,12 +290,23 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
-  const [checkIn, setCheckIn] = useState(initialSearchParams.checkIn ?? nextDate(14));
-  const [checkOut, setCheckOut] = useState(initialSearchParams.checkOut ?? nextDate(16));
+  const hasLegacyDefaultDates = initialSearchParams.checkIn === nextDate(14) && initialSearchParams.checkOut === nextDate(16);
+  const [checkIn, setCheckIn] = useState(hasLegacyDefaultDates ? '' : initialSearchParams.checkIn ?? '');
+  const [checkOut, setCheckOut] = useState(hasLegacyDefaultDates ? '' : initialSearchParams.checkOut ?? '');
+  const [dateRangeExplicit, setDateRangeExplicit] = useState(Boolean(
+    initialSearchParams.checkIn && initialSearchParams.checkOut
+    && !hasLegacyDefaultDates,
+  ));
   const [adultsCount, setAdults] = useState(0);
   const [bookingAdultsCount, setBookingAdults] = useState(1);
   const [kidsCount, setKids] = useState(Math.max(0, Number(initialSearchParams.kidsCount ?? 0)));
   const t = words[locale];
+  const listingCities = cities.filter((city) => city.country === listingCountry);
+
+  useEffect(() => {
+    const urls = listingImageUrls.current;
+    return () => { urls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, []);
   const bookingText = locale === 'ar' ? {
     edit: '\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0637\u0644\u0628', cancel: '\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632', accept: '\u0642\u0628\u0648\u0644 \u0627\u0644\u0637\u0644\u0628', decline: '\u0631\u0641\u0636 \u0627\u0644\u0637\u0644\u0628', save: '\u062d\u0641\u0638 \u0627\u0644\u062a\u0639\u062f\u064a\u0644\u0627\u062a', reason: '\u0633\u0628\u0628 \u0627\u0644\u0625\u0644\u063a\u0627\u0621 (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)', cancelPrompt: '\u0647\u0644 \u062a\u0631\u064a\u062f \u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632\u061f', confirmCancel: '\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0625\u0644\u063a\u0627\u0621', keep: '\u0627\u0644\u0627\u062d\u062a\u0641\u0627\u0638 \u0628\u0627\u0644\u062d\u062c\u0632', updated: '\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0637\u0644\u0628 \u0627\u0644\u062d\u062c\u0632.', cancelled: '\u062a\u0645 \u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632.', decisionSaved: '\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u062d\u0627\u0644\u0629 \u0627\u0644\u0637\u0644\u0628.', empty: '\u0644\u0627 \u062a\u0648\u062c\u062f \u062d\u062c\u0648\u0632\u0627\u062a \u0647\u0646\u0627 \u0645\u0639 \u0630\u0644\u0643.', invalidDates: '\u062a\u0623\u0643\u062f \u0645\u0646 \u0623\u0646 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0628\u0639\u062f \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644.', loading: '\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0645\u064a\u0644\u2026', retry: '\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629',
   } : {
@@ -352,8 +389,10 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
       ['where', 'page', 'checkIn', 'checkOut', 'minPrice', 'maxPrice', 'unitCategory', 'roomsCount', 'adultsCount', 'adultGuests', 'kidsCount', 'hasInternetService', 'hasKitchen', 'hasPrivateGarage'].forEach((key) => url.searchParams.delete(key));
       if (term) url.searchParams.set('where', term);
       if (result.page > 1) url.searchParams.set('page', String(result.page));
-      if (checkIn) url.searchParams.set('checkIn', checkIn);
-      if (checkOut) url.searchParams.set('checkOut', checkOut);
+      if (dateRangeExplicit && checkIn && checkOut) {
+        url.searchParams.set('checkIn', checkIn);
+        url.searchParams.set('checkOut', checkOut);
+      }
       if (minPrice) url.searchParams.set('minPrice', minPrice);
       if (maxPrice) url.searchParams.set('maxPrice', maxPrice);
       if (category) url.searchParams.set('unitCategory', category);
@@ -371,7 +410,7 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
         setLoading(false);
       }
     }
-  }, [query, minPrice, maxPrice, category, roomsFilter, internetFilter, kitchenFilter, garageFilter, adultsCount, kidsCount, cities, countries, locale, checkIn, checkOut, t.loadError]);
+  }, [query, minPrice, maxPrice, category, roomsFilter, internetFilter, kitchenFilter, garageFilter, adultsCount, kidsCount, cities, countries, locale, checkIn, checkOut, dateRangeExplicit, t.loadError]);
 
   const loadBookings = useCallback(async (which: 'guest' | 'host' = party) => {
     setBookingsLoading(true);
@@ -395,7 +434,7 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
     let current = true;
     void Promise.all([
       api('countries').then(arrayData<Ref>).catch(() => []),
-      api('cities').then(arrayData<Ref>).catch(() => []),
+      api('cities').then(arrayData<CityRef>).catch(() => []),
       api('unit-categories').then(arrayData<Ref>).catch(() => []),
     ]).then(([countryRefs, cityRefs, categoryRefs]) => {
       if (!current) return;
@@ -417,8 +456,22 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
   }, [destinationOpen]);
 
   useEffect(() => {
-    api('auth/me').then(() => setSignedIn(true)).catch(() => setSignedIn(false));
+    api('auth/me').then(() => {
+      setSignedIn(true);
+      void api('users/me').then((body) => setProfile(objectData<UserProfile>(body))).catch(() => setProfile(null));
+    }).catch(() => { setSignedIn(false); setProfile(null); });
   }, []);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (event.target instanceof Node && !accountMenuRef.current?.contains(event.target)) setAccountOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setAccountOpen(false); };
+    document.addEventListener('pointerdown', closeOnOutsidePress);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('pointerdown', closeOnOutsidePress); document.removeEventListener('keydown', closeOnEscape); };
+  }, [accountOpen]);
 
   useEffect(() => {
     loadUnitsRef.current = loadUnits;
@@ -458,6 +511,15 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
   }, [locale]);
+
+  useEffect(() => {
+    if (dateRangeExplicit) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('checkIn') && !url.searchParams.has('checkOut')) return;
+    url.searchParams.delete('checkIn');
+    url.searchParams.delete('checkOut');
+    window.history.replaceState({}, '', url);
+  }, [dateRangeExplicit]);
 
   useEffect(() => {
     if (!selected && !authOpen && !filtersOpen && !cancellationTarget) return;
@@ -665,6 +727,10 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         const errors = Array.isArray(body.errors) ? body.errors as { code?: string; field?: string; message?: string }[] : [];
+        if (errors.some((item) => item.code === 'CUSTOMER_EMAIL_NOT_VERIFIED')) {
+          router.push('/activate?email=' + encodeURIComponent(String(payload.email ?? '')));
+          return;
+        }
         const apiError = errors.find((item) => typeof item.message === 'string');
         const applicationCode = typeof body.code === 'string' ? body.code : undefined;
         const field = apiError?.field === 'email' || apiError?.field === 'name' || apiError?.field === 'countryCode' || apiError?.field === 'phone' || apiError?.field === 'password'
@@ -679,9 +745,45 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
         const message = apiError?.message ?? (applicationCode === 'INVALID_CREDENTIALS' ? t.invalidCredentials : typeof body.message === 'string' ? body.message : t.loadError);
         throw new Error(message);
       }
+      if (registering) {
+        router.push('/activate?email=' + encodeURIComponent(String(payload.email ?? '')));
+        closeAuth();
+        return;
+      }
       setSignedIn(true); closeAuth(); setNotice(registering ? t.authRegisterSuccess : t.authLoginSuccess);
+      void api('users/me').then((body) => setProfile(objectData<UserProfile>(body))).catch(() => setProfile(null));
     } catch (cause) { setError(cause instanceof Error ? cause.message : t.loadError); }
     finally { setBusy(false); }
+  }
+
+  function addListingImages(files: FileList | null) {
+    if (!files?.length) return;
+    const selected = Array.from(files);
+    if (listingPhotoInput.current) listingPhotoInput.current.value = '';
+    if (listingImages.length + selected.length > 5) { setListingPhotoError(t.photoLimit); return; }
+    if (selected.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) { setListingPhotoError(t.photoType); return; }
+    if (selected.some((file) => file.size > 5 * 1024 * 1024)) { setListingPhotoError(t.photoSize); return; }
+    const additions = selected.map((file) => {
+      const preview = URL.createObjectURL(file);
+      listingImageUrls.current.add(preview);
+      return { file, preview };
+    });
+    setListingImages((current) => [...current, ...additions]);
+    setListingPhotoError('');
+  }
+
+  function removeListingImage(preview: string) {
+    setListingImages((current) => current.filter((image) => image.preview !== preview));
+    setListingPhotoError('');
+    listingImageUrls.current.delete(preview);
+    URL.revokeObjectURL(preview);
+  }
+
+  function makeListingCover(preview: string) {
+    setListingImages((current) => {
+      const selected = current.find((image) => image.preview === preview);
+      return selected ? [selected, ...current.filter((image) => image.preview !== preview)] : current;
+    });
   }
 
   async function submitListing(event: FormEvent<HTMLFormElement>) {
@@ -690,31 +792,51 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
     const listingForm = event.currentTarget;
     const form = new FormData(listingForm);
     const value = (key: string) => String(form.get(key) ?? '');
-    if (!value('country') || !value('city') || !value('unitCategory')) {
+    if (!listingImages.length) {
+      setListingPhotoError(t.photoRequired);
+      listingPhotoInput.current?.focus();
+      return;
+    }
+    if (!value('country') || !value('city') || !value('unitCategory') || !listingCities.some((city) => city.id === value('city'))) {
       setListingValidationAttempted(true);
-      setError(t.listingRequired);
+      setListingError(t.listingRequired);
       window.requestAnimationFrame(() => listingForm.querySelector<HTMLButtonElement>('.premium-dropdown-trigger[aria-invalid="true"]')?.focus());
       return;
     }
-    setBusy(true); setError('');
+    setBusy(true); setListingError(''); setListingPhase('upload');
     try {
+      const images = new FormData();
+      listingImages.forEach(({ file }) => images.append('files', file));
+      const uploaded = arrayData<{ url: string }>(await api('files/images/batch', { method: 'POST', body: images }));
+      if (uploaded.length !== listingImages.length || uploaded.some((image) => !image.url)) throw new Error(t.loadError);
+      setListingPhase('publish');
       await api('units', { method: 'POST', body: JSON.stringify({
         title: value('title'), description: value('description'), address: value('address'),
-        photos: [value('photoUrl')], costPerDay: Number(value('costPerDay')),
+        photos: uploaded.map((image) => image.url), costPerDay: Number(value('costPerDay')),
         country: value('country'), city: value('city'), unitCategory: value('unitCategory'),
         roomsCount: Number(value('roomsCount')), adultsCount: Number(value('adultsCount')),
         kidsCount: Number(value('kidsCount')), hasInternetService: form.has('hasInternetService'),
         hasKitchen: form.has('hasKitchen'), hasPrivateGarage: form.has('hasPrivateGarage'),
         availability: true,
       }) });
-      setNotice(t.listingSaved); listingForm.reset(); setListingCountry(''); setListingCity(''); setListingCategory(''); setListingValidationAttempted(false); await loadUnits(); setView('explore');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t.loadError); }
-    finally { setBusy(false); }
+      setNotice(t.listingSaved); listingForm.reset(); setListingCountry(''); setListingCity(''); setListingCategory(''); setListingValidationAttempted(false); setListingError('');
+      listingImageUrls.current.forEach((url) => URL.revokeObjectURL(url)); listingImageUrls.current.clear(); setListingImages([]);
+      await loadUnits(); setView('explore');
+    } catch (cause) { setListingError(cause instanceof Error ? cause.message : t.loadError); }
+    finally { setBusy(false); setListingPhase(null); }
   }
 
   async function logOut() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setSignedIn(false); setView('explore');
+    if (accountBusy) return;
+    setAccountBusy(true); setAccountError('');
+    try {
+      await api('auth/logout', { method: 'POST' });
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!response.ok) throw new Error(t.signOutFailed);
+      setSignedIn(false); setProfile(null); setAccountOpen(false); setView('explore');
+      setBookings([]); setMyUnits([]); setNotice('');
+    } catch { setAccountError(t.signOutFailed); }
+    finally { setAccountBusy(false); }
   }
 
   async function setListingActive(unit: Unit) {
@@ -743,10 +865,16 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
   }
 
   function switchView(next: 'explore' | 'trips' | 'host') {
+    const scrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    if (next === view) {
+      window.scrollTo({ top: 0, behavior: scrollBehavior });
+      return;
+    }
     setView(next); setError(''); setNotice('');
     if (next === 'trips') void loadBookings();
     if (next === 'host') void loadMyUnits();
     if (next === 'explore') void loadUnits();
+    window.scrollTo({ top: 0, behavior: scrollBehavior });
   }
 
   function chooseDestination(destination: (typeof destinationSuggestions)[number]) {
@@ -865,16 +993,26 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
   return (
     <main className="site-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => switchView('explore')} aria-label={t.explore}>
+        <button type="button" className="brand" onClick={() => switchView('explore')} aria-label={`${t.brand} — ${t.explore}`}>
           <span className="brand-mark"><BrandMark /></span><span><b>{t.brand}</b><small>{t.tagline}</small></span>
         </button>
-        {signedIn && <nav className="main-nav" aria-label={t.navigation}>
+        {signedIn ? <nav className="main-nav" aria-label={t.navigation}>
             <button type="button" className={view === 'trips' ? 'nav-link active' : 'nav-link'} aria-current={view === 'trips' ? 'page' : undefined} onClick={() => switchView('trips')}><NavIcon kind="trips" /><span>{t.trips}</span></button>
             <button type="button" className={view === 'host' ? 'nav-link active' : 'nav-link'} aria-current={view === 'host' ? 'page' : undefined} onClick={() => switchView('host')}><NavIcon kind="host" /><span>{t.host}</span></button>
-        </nav>}
+        </nav> : <span className="header-edition"><span aria-hidden="true" />{locale === 'ar' ? 'أماكن تشبهك' : 'Places that feel like yours'}</span>}
         <div className="top-actions">
-          <button className="language-button" onClick={() => chooseLocale(locale === 'ar' ? 'en' : 'ar')}>{locale === 'ar' ? 'EN' : 'عربي'}</button>
-          {signedIn ? <button type="button" className="account-button signed-in-account" onClick={logOut}><span className="avatar">M</span><span>{t.signOut}</span><LogoutIcon /></button> :
+          <button type="button" className="language-button" onClick={() => chooseLocale(locale === 'ar' ? 'en' : 'ar')} aria-label={locale === 'ar' ? 'Switch to English' : 'التحويل إلى العربية'}><GlobeIcon />{locale === 'ar' ? 'EN' : 'عربي'}</button>
+          {signedIn ? <div className="account-menu-wrap" ref={accountMenuRef}>
+            <button type="button" className="account-button signed-in-account" aria-haspopup="menu" aria-expanded={accountOpen} aria-controls="customer-account-menu" onClick={() => { setAccountOpen((open) => !open); setAccountError(''); }}>
+              <span className="avatar">{profile?.name ? Array.from(profile.name.trim())[0] : '•'}</span><span className="account-label">{profile?.name?.split(' ')[0] || t.profile}</span><span className="account-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><path d="m4.75 6.5 3.25 3.25 3.25-3.25" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+            </button>
+            {accountOpen && <div className="account-menu" id="customer-account-menu" role="menu" aria-label={t.accountMenu}>
+              <div className="account-menu-identity"><span className="avatar">{profile?.name ? Array.from(profile.name.trim())[0] : '•'}</span><span><b>{profile?.name || t.profile}</b><small dir="ltr">{profile?.email || ''}</small></span></div>
+              <Link href="/profile" role="menuitem" className="account-menu-link" onClick={() => setAccountOpen(false)}>{t.profile}<span aria-hidden="true">↗</span></Link>
+              <button type="button" role="menuitem" className="account-menu-logout" disabled={accountBusy} onClick={() => void logOut()}>{accountBusy ? t.loading : t.signOut}<LogoutIcon /></button>
+              {accountError && <p className="account-menu-error" role="alert">{accountError}</p>}
+            </div>}
+          </div> :
             <button className="account-button" onClick={() => { setRegistering(false); setAuthOpen(true); }}>{t.account}<span className="avatar">↗</span></button>}
         </div>
       </header>
@@ -885,8 +1023,8 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
           <div className="hero-shade" />
           <div className="hero-content">
             <span className="eyebrow">{t.brand} <i /> {t.heroKicker}</span>
-            <h1>{locale === 'ar' ? <>إقامتك القادمة<br />تبدأ من هنا.</> : <>Your next stay<br />starts here.</>}</h1>
-            <p>{locale === 'ar' ? 'أماكن مختارة بعناية، وتفاصيل تجعل الرحلة أقرب إليك.' : 'Considered homes, thoughtful details, and room to feel at home.'}</p>
+            <h1>{locale === 'ar' ? <>إقامة تشبهك،<br />أينما ذهبت.</> : <>Feel at home,<br />wherever you go.</>}</h1>
+            <p>{locale === 'ar' ? 'أماكن تناسب إيقاعك، وتفاصيل واضحة من البحث حتى الحجز.' : 'Places that suit your pace, with clarity from search to booking.'}</p>
             <div className="hero-search">
               <div className="destination-field" ref={destinationFieldRef}>
                 <label htmlFor="destination-search"><span>{t.where}</span><input id="destination-search" role="combobox" aria-autocomplete="list" aria-expanded={destinationOpen && referenceDataReady} aria-controls="destination-options" aria-activedescendant={destinationOpen && activeDestinationIndex >= 0 ? `destination-option-${activeDestinationIndex}` : undefined} value={query} onFocus={() => setDestinationOpen(true)} onChange={(event) => { setQuery(event.target.value); setActiveDestinationIndex(-1); setDestinationOpen(true); }} onKeyDown={handleDestinationKeyDown} placeholder={locale === 'ar' ? 'مدينة أو اسم إقامة' : 'City or stay name'} /></label>
@@ -899,7 +1037,7 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
                   </button>) : <p className="destination-empty">{locale === 'ar' ? 'لا توجد وجهات مطابقة. يمكنك البحث بالاسم مباشرة.' : 'No matching destinations. You can search by name.'}</p>}
                 </div>}
               </div>
-              <DateRangePicker locale={locale} label={t.dates} checkInLabel={t.checkIn} checkOutLabel={t.checkOut} checkIn={checkIn} checkOut={checkOut} onChange={(nextCheckIn, nextCheckOut) => { setCheckIn(nextCheckIn); setCheckOut(nextCheckOut); }} />
+              <DateRangePicker locale={locale} label={t.dates} checkInLabel={t.checkIn} checkOutLabel={t.checkOut} checkIn={checkIn} checkOut={checkOut} onChange={(nextCheckIn, nextCheckOut) => { setCheckIn(nextCheckIn); setCheckOut(nextCheckOut); setDateRangeExplicit(Boolean(nextCheckIn && nextCheckOut)); }} />
               <button className="filter-trigger" type="button" onClick={() => setFiltersOpen(true)} aria-label={t.filters}><span>☷</span>{t.filter}{activeFilterCount > 0 && <b className="filter-count">{formatNumber(activeFilterCount, locale)}</b>}</button>
               <button className="search-submit" onClick={() => setSearchRevision((revision) => revision + 1)} aria-label={t.search}><SearchIcon /></button>
             </div>
@@ -1008,40 +1146,74 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
           <div className="host-unit-copy"><span className={unit.isActive ? 'host-state active-state' : 'host-state'}>{unit.isActive ? t.active : t.paused}</span><h3>{displayUnitTitle(unit.title, locale, locationName(unit))}</h3><p>{locationName(unit)} · {formatMoney(unit.costPerDay, locale)} / {t.night}</p></div>
           <div className="host-unit-actions"><button className="outline-button" disabled={busy} onClick={() => void setListingActive(unit)}>{unit.isActive ? t.pauseListing : t.activateListing}</button><button className="danger-button" disabled={busy} onClick={() => void deleteListing(unit)}>{t.deleteListing}</button></div>
         </article>)}</div>}
-        <form id="listing-form" className="listing-form" onSubmit={submitListing}><div className="form-title"><span className="eyebrow dark">{t.hostFormKicker}</span><h2>{t.createListing}</h2></div>
-          <div className="form-grid"><label className="field wide"><span>{t.title}</span><input name="title" minLength={5} maxLength={100} required /></label><label className="field wide"><span>{t.description}</span><textarea name="description" rows={3} required /></label><label className="field wide"><span>{t.address}</span><input name="address" required /></label><label className="field wide"><span>{t.photoUrl}</span><input name="photoUrl" type="url" required placeholder="https://…" /></label>
-            <label className="field"><span>{t.country}</span><PremiumDropdown name="country" required invalid={listingValidationAttempted && !listingCountry} value={listingCountry} onChange={(value) => { setListingCountry(value); setError(''); }} options={[{ value: '', label: t.chooseOption }, ...countries.map((item) => ({ value: item.id, label: localizeReference(item.name, locale) }))]} /></label>
-            <label className="field"><span>{t.city}</span><PremiumDropdown name="city" required invalid={listingValidationAttempted && !listingCity} value={listingCity} onChange={(value) => { setListingCity(value); setError(''); }} options={[{ value: '', label: t.chooseOption }, ...cities.map((item) => ({ value: item.id, label: localizeReference(item.name, locale) }))]} /></label>
-            <label className="field"><span>{t.category}</span><PremiumDropdown name="unitCategory" required invalid={listingValidationAttempted && !listingCategory} value={listingCategory} onChange={(value) => { setListingCategory(value); setError(''); }} options={[{ value: '', label: t.chooseOption }, ...categories.map((item) => ({ value: item.id, label: localizeReference(item.name, locale) }))]} /></label>
-            <label className="field"><span>{t.price}</span><input name="costPerDay" type="number" min="1" required /></label>
-            <label className="field"><span>{t.rooms}</span><input name="roomsCount" type="number" min="1" defaultValue="1" required /></label>
-            <label className="field"><span>{t.adults}</span><input name="adultsCount" type="number" min="1" defaultValue="2" required /></label>
-            <label className="field"><span>{t.children}</span><input name="kidsCount" type="number" min="0" defaultValue="0" required /></label></div>
+        <form id="listing-form" className="listing-form" onSubmit={submitListing}>
+          <div className="form-title"><span className="eyebrow dark">{t.hostFormKicker}</span><h2>{t.createListing}</h2><p>{t.listingIntro}</p></div>
+          <div className="listing-section-heading"><span>01</span><h3>{t.listingPlace}</h3></div>
+          <div className="form-grid listing-form-grid"><label className="field wide"><span>{t.title}</span><input name="title" minLength={5} maxLength={100} placeholder={t.titlePlaceholder} required /></label><label className="field wide"><span>{t.description}</span><textarea name="description" rows={4} placeholder={t.descriptionPlaceholder} required /></label></div>
+          <div className="listing-section-heading"><span>02</span><h3>{t.photoUrl}</h3></div>
+          <div className="listing-photo-section">
+            <label className={`listing-upload-zone${listingImages.length >= 5 ? ' is-full' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!busy) addListingImages(event.dataTransfer.files); }}>
+              <input ref={listingPhotoInput} type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || listingImages.length >= 5} onChange={(event) => addListingImages(event.target.files)} aria-describedby="listing-photo-hint" />
+              <span className="listing-upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0 4 4m-4-4L8 8M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+              <strong>{listingImages.length >= 5 ? t.photoLimit : t.photoDrop}</strong><small id="listing-photo-hint">{t.photoHint}</small>
+            </label>
+            {listingPhotoError && <p className="listing-photo-error" role="alert">{listingPhotoError}</p>}
+            {listingImages.length > 0 && <div className="listing-photo-grid" aria-label={t.photoUrl}>{listingImages.map((image, index) => <div className="listing-photo-card" key={image.preview}>
+              <SmartImage src={image.preview} alt={image.file.name} sizes="(max-width: 620px) 45vw, 180px" width={360} />
+              <span className="listing-photo-number">{String(index + 1).padStart(2, '0')}</span>
+              {index === 0 ? <span className="listing-cover-badge">{t.photoCover}</span> : <button type="button" className="listing-cover-action" disabled={busy} onClick={() => makeListingCover(image.preview)}>{t.photoMakeCover}</button>}
+              <button type="button" className="listing-photo-remove" disabled={busy} aria-label={`${t.photoRemove}: ${image.file.name}`} onClick={() => removeListingImage(image.preview)}>×</button>
+            </div>)}</div>}
+          </div>
+          <div className="listing-section-heading"><span>03</span><h3>{t.listingLocation}</h3></div>
+          <div className="form-grid listing-form-grid">
+            <label className="field"><span>{t.country}</span><PremiumDropdown name="country" required invalid={listingValidationAttempted && !listingCountry} value={listingCountry} onChange={(value) => { setListingCountry(value); setListingCity(''); setListingError(''); }} options={[{ value: '', label: t.chooseOption }, ...countries.map((item) => ({ value: item.id, label: localizeReference(item.name, locale) }))]} /></label>
+            <label className="field"><span>{t.city}</span><PremiumDropdown name="city" required disabled={!listingCountry || listingCities.length === 0} invalid={listingValidationAttempted && !listingCity && Boolean(listingCountry)} value={listingCity} onChange={(value) => { setListingCity(value); setListingError(''); }} options={[{ value: '', label: !listingCountry ? t.chooseCountryFirst : listingCities.length ? t.chooseOption : t.noCities }, ...listingCities.map((item) => ({ value: item.id, label: localizeReference(item.name, locale) }))]} /></label>
+            <p className="listing-field-hint wide">{t.cityForCountry}</p>
+            <label className="field wide"><span>{t.address}</span><input name="address" placeholder={t.addressPlaceholder} required /></label>
+          </div>
+          <div className="listing-section-heading"><span>04</span><h3>{t.listingDetails}</h3></div>
+          <div className="form-grid listing-form-grid">
+            <label className="field"><span>{t.category}</span><PremiumDropdown name="unitCategory" required invalid={listingValidationAttempted && !listingCategory} value={listingCategory} onChange={(value) => { setListingCategory(value); setListingError(''); }} options={[{ value: '', label: t.chooseOption }, ...categories.map((item) => ({ value: item.id, label: localizeReference(item.name, locale) }))]} /></label>
+            <label className="field"><span>{t.price}</span><input name="costPerDay" type="number" min="1" placeholder={t.pricePlaceholder} required /></label>
+            <label className="field"><span>{t.rooms}</span><input name="roomsCount" type="number" min="1" placeholder="2" required /></label>
+            <label className="field"><span>{t.adults}</span><input name="adultsCount" type="number" min="1" placeholder="4" required /></label>
+            <label className="field"><span>{t.children}</span><input name="kidsCount" type="number" min="0" placeholder="0" required /></label>
+          </div>
           <div className="amenity-checks"><label><input type="checkbox" name="hasInternetService" /> {t.internet}</label><label><input type="checkbox" name="hasKitchen" /> {t.kitchen}</label><label><input type="checkbox" name="hasPrivateGarage" /> {t.garage}</label></div>
-          {error && <div className="message error-message" role="alert">{error}</div>}<button className="primary-button" disabled={busy}>{busy ? t.loading : t.publish}</button>
+          {listingError && <div className="message error-message" role="alert">{listingError}</div>}
+          <button className="primary-button listing-publish" disabled={busy}>{busy ? <><span className="auth-spinner" />{listingPhase === 'upload' ? t.uploadingPhotos : t.loading}</> : t.publish}</button>
         </form>
       </section>}
 
       <footer className="site-footer">
-        <div className="footer-main">
-          <button type="button" className="footer-brand" onClick={() => switchView('explore')} aria-label={t.explore}>
-            <span className="brand-mark"><BrandMark /></span>
-            <span className="footer-brand-copy"><b>{t.brand}</b><small>{t.tagline}</small></span>
-          </button>
-          <p className="footer-promise">{locale === 'ar' ? 'إقامات مختارة لتجارب تبقى.' : 'Considered stays for lasting memories.'}</p>
-          <nav className="footer-nav" aria-label={t.navigation}>
-            <span className="footer-section-title">{locale === 'ar' ? 'اكتشف' : 'Explore'}</span>
-            <button type="button" onClick={() => switchView('explore')}>{t.explore}</button>
-            {signedIn && <>
-              <button type="button" onClick={() => switchView('trips')}>{t.trips}</button>
-              <button type="button" onClick={() => switchView('host')}>{t.host}</button>
-            </>}
-          </nav>
-        </div>
-        <div className="footer-bottom">
-          <span>© {new Intl.DateTimeFormat(locale, { year: 'numeric' }).format(new Date())} {t.brand}</span>
-          <span>{locale === 'ar' ? 'صُممت كل إقامة لتشبه حكاية تستحق أن تُعاش.' : 'Every stay is the start of a story worth keeping.'}</span>
-          <button type="button" onClick={() => chooseLocale(locale === 'ar' ? 'en' : 'ar')}>{locale === 'ar' ? 'English' : 'العربية'}</button>
+        <div className="footer-inner">
+          <div className="footer-lead">
+            <div><span className="footer-kicker"><i aria-hidden="true" />{locale === 'ar' ? 'مساحة لتكون على راحتك' : 'Room to feel at home'}</span><h2>{locale === 'ar' ? 'مكانك القادم أقرب مما تتخيل.' : 'Your next place is closer than you think.'}</h2></div>
+            <button type="button" className="footer-cta" onClick={() => switchView('explore')}><span>{t.explore}</span><span className="footer-cta-arrow" aria-hidden="true">↗</span></button>
+          </div>
+          <div className="footer-main">
+            <div className="footer-brand-column">
+              <button type="button" className="footer-brand" onClick={() => switchView('explore')} aria-label={`${t.brand} — ${t.explore}`}>
+                <span className="brand-mark"><BrandMark /></span>
+                <span className="footer-brand-copy"><b>{t.brand}</b><small>{t.tagline}</small></span>
+              </button>
+              <p className="footer-promise">{locale === 'ar' ? 'أماكن تناسبك، وتجربة حجز واضحة من البحث حتى الوصول.' : 'Places that suit you, with a clear path from discovery to arrival.'}</p>
+            </div>
+            <nav className="footer-nav" aria-label={t.navigation}>
+              <span className="footer-section-title">{locale === 'ar' ? 'روابط سريعة' : 'Quick links'}</span>
+              <button type="button" onClick={() => switchView('explore')}>{t.explore}<span aria-hidden="true">↗</span></button>
+              {signedIn ? <>
+                <button type="button" onClick={() => switchView('trips')}>{t.trips}<span aria-hidden="true">↗</span></button>
+                <button type="button" onClick={() => switchView('host')}>{t.host}<span aria-hidden="true">↗</span></button>
+              </> : <button type="button" onClick={() => { setRegistering(false); setAuthOpen(true); }}>{t.account}<span aria-hidden="true">↗</span></button>}
+            </nav>
+          </div>
+          <div className="footer-bottom">
+            <span>© {new Intl.DateTimeFormat(locale, { year: 'numeric' }).format(new Date())} {t.brand}</span>
+            <span>{locale === 'ar' ? 'مكان تحسّه مكانك.' : 'A place that feels like yours.'}</span>
+            <button type="button" onClick={() => chooseLocale(locale === 'ar' ? 'en' : 'ar')}><GlobeIcon />{locale === 'ar' ? 'English' : 'العربية'}</button>
+          </div>
         </div>
       </footer>
 
@@ -1065,7 +1237,7 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
           </div>
           <div className="detail-body"><span className="eyebrow dark">{locationName(selected)}</span><h2 id="stay-title">{displayUnitTitle(selected.title, locale, locationName(selected))}</h2><p className="detail-capacity">{formatBedrooms(selected.roomsCount, locale)} · {formatGuests(selected.adultsCount, locale)} · {locationName(selected)}</p><p className="detail-description">{displayUnitDescription(selected.description, locale)}</p>
             <div className="amenity-row"><span>{selected.hasInternetService ? '◉ ' + t.internet : ''}</span><span>{selected.hasKitchen ? '⌂ ' + t.kitchen : ''}</span><span>{selected.hasPrivateGarage ? '▣ ' + t.garage : ''}</span></div>
-            {isPreviewUnit(selected.title, selected.description) ? <div className="preview-alert" role="note"><span>◷</span><div><b>{t.previewOnly}</b><p>{t.previewMessage}</p></div></div> : <form className="booking-panel" onSubmit={requestBooking}><h3>{t.reserve}</h3><div className="booking-date-range"><DateRangePicker locale={locale} label={t.dates} checkInLabel={t.checkIn} checkOutLabel={t.checkOut} checkIn={checkIn} checkOut={checkOut} onChange={(nextCheckIn, nextCheckOut) => { setCheckIn(nextCheckIn); setCheckOut(nextCheckOut); setEstimate(null); }} variant="booking" /></div>
+            {isPreviewUnit(selected.title, selected.description) ? <div className="preview-alert" role="note"><span>◷</span><div><b>{t.previewOnly}</b><p>{t.previewMessage}</p></div></div> : <form className="booking-panel" onSubmit={requestBooking}><h3>{t.reserve}</h3><div className="booking-date-range"><DateRangePicker locale={locale} label={t.dates} checkInLabel={t.checkIn} checkOutLabel={t.checkOut} checkIn={checkIn} checkOut={checkOut} onChange={(nextCheckIn, nextCheckOut) => { setCheckIn(nextCheckIn); setCheckOut(nextCheckOut); setDateRangeExplicit(Boolean(nextCheckIn && nextCheckOut)); setEstimate(null); }} variant="booking" /></div>
               <div className="date-grid"><label className="field"><span>{t.adults}</span><input type="number" min="1" max={selected.adultsCount} value={bookingAdultsCount} onChange={(event) => setBookingAdults(Math.min(selected.adultsCount, Math.max(1, Number(event.target.value) || 1)))} /></label><label className="field"><span>{t.children}</span><input type="number" min="0" max={selected.kidsCount} value={kidsCount} onChange={(event) => setKids(Math.min(selected.kidsCount, Math.max(0, Number(event.target.value) || 0)))} /></label></div>
               <button type="button" className="outline-button full-button" disabled={busy || !checkDatesValid} onClick={() => void checkPrice()}>{busy ? t.loading : t.check}</button>
               {estimate && <div className="estimate"><p className={estimate.available ? 'available' : 'unavailable'}>{estimate.available ? '✓ ' + t.available : '× ' + t.unavailable}</p><div><span>{t.subtotal}</span><span>{formatMoney(estimate.bookingAmount, locale)}</span></div><div><span>{t.tax} ({formatNumber(estimate.vat, locale)}%)</span><span>{formatMoney(estimate.vatAmount, locale)}</span></div><div className="estimate-total"><b>{t.total}</b><b>{formatMoney(estimate.totalAmount, locale)}</b></div></div>}
@@ -1142,6 +1314,7 @@ export default function CustomerHome({ initialLocale = 'ar', initialSignedIn = f
               <label className="field"><span>{t.email}</span><input name="email" type="email" autoComplete="email" placeholder={t.emailPlaceholder} required data-autofocus={!registering ? '' : undefined} onBlur={handleAuthFieldBlur} aria-invalid={Boolean(authFieldErrors.email)} aria-describedby={authFieldErrors.email ? 'auth-email-error' : undefined} />{authFieldErrors.email && <small className="auth-field-error" id="auth-email-error">{authFieldErrors.email}</small>}</label>
               <label className="field"><span>{t.password}</span><span className="auth-password-control" data-invalid={Boolean(authFieldErrors.password)}><input id="auth-password" name="password" type={passwordVisible ? 'text' : 'password'} autoComplete={registering ? 'new-password' : 'current-password'} placeholder={t.passwordPlaceholder} minLength={registering ? 8 : undefined} maxLength={registering ? 128 : undefined} required aria-describedby={[registering ? 'auth-password-hint' : '', authFieldErrors.password ? 'auth-password-error' : ''].filter(Boolean).join(' ') || undefined} onBlur={handleAuthFieldBlur} aria-invalid={Boolean(authFieldErrors.password)} /><button type="button" className="password-visibility" onClick={() => setPasswordVisible(!passwordVisible)} aria-label={passwordVisible ? t.hidePassword : t.showPassword} title={passwordVisible ? t.hidePassword : t.showPassword}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/>{passwordVisible && <path d="m4 4 16 16"/>}</svg></button></span>{registering && <small id="auth-password-hint" className="auth-field-hint">{t.passwordHint}</small>}{authFieldErrors.password && <small className="auth-field-error" id="auth-password-error">{authFieldErrors.password}</small>}</label>
               {registering && <label className="field"><span>{t.confirmPassword}</span><span className="auth-password-control" data-invalid={Boolean(authFieldErrors.confirmPassword)}><input name="confirmPassword" type={passwordVisible ? 'text' : 'password'} autoComplete="new-password" placeholder={t.passwordPlaceholder} minLength={8} maxLength={128} required onBlur={handleAuthFieldBlur} aria-invalid={Boolean(authFieldErrors.confirmPassword)} aria-describedby={authFieldErrors.confirmPassword ? 'auth-confirm-password-error' : undefined} /><button type="button" className="password-visibility" onClick={() => setPasswordVisible(!passwordVisible)} aria-label={passwordVisible ? t.hidePassword : t.showPassword} title={passwordVisible ? t.hidePassword : t.showPassword}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/>{passwordVisible && <path d="m4 4 16 16"/>}</svg></button></span>{authFieldErrors.confirmPassword && <small className="auth-field-error" id="auth-confirm-password-error">{authFieldErrors.confirmPassword}</small>}</label>}
+              {!registering && <Link className="auth-forgot-link" href="/forgot-password">{locale === 'ar' ? 'نسيت كلمة المرور؟' : 'Forgot password?'}</Link>}
               {error && <div className="message error-message auth-error" role="alert">{error}</div>}
               <button className="primary-button full-button auth-submit" disabled={busy}>{busy ? <><span className="auth-spinner" aria-hidden="true" />{t.loading}</> : <>{registering ? t.registerSubmit : t.loginSubmit}<span aria-hidden="true">{locale === 'ar' ? '←' : '→'}</span></>}</button>
             </form>
@@ -1175,13 +1348,14 @@ function calendarMonthOffset(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1, 12);
 }
 
-function PremiumDropdown({ value, onChange, options, name, required = false, invalid = false }: {
+function PremiumDropdown({ value, onChange, options, name, required = false, invalid = false, disabled = false }: {
   value: string;
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   name?: string;
   required?: boolean;
   invalid?: boolean;
+  disabled?: boolean;
 }) {
   const menuId = useId();
   const [open, setOpen] = useState(false);
@@ -1257,7 +1431,7 @@ function PremiumDropdown({ value, onChange, options, name, required = false, inv
 
   return <div className="premium-dropdown" ref={rootRef}>
     {name && <input type="hidden" name={name} value={value} />}
-    <button ref={triggerRef} className="premium-dropdown-trigger" type="button" role="combobox" data-field-name={name} aria-required={required || undefined} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-controls={menuId} aria-expanded={open} onClick={() => { setActiveIndex(selectedIndex); setOpen((current) => !current); }} onKeyDown={handleTriggerKeyDown}>
+    <button ref={triggerRef} className="premium-dropdown-trigger" type="button" role="combobox" data-field-name={name} disabled={disabled} aria-required={required || undefined} aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-controls={menuId} aria-expanded={open} onClick={() => { setActiveIndex(selectedIndex); setOpen((current) => !current); }} onKeyDown={handleTriggerKeyDown}>
       <span>{selectedLabel}</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
     </button>
     {open && typeof document !== 'undefined' && createPortal(<div id={menuId} ref={menuRef} className="premium-dropdown-menu" role="listbox" tabIndex={-1} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
@@ -1410,15 +1584,10 @@ function NavIcon({ kind }: { kind: 'trips' | 'host' }) {
   return <svg className="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.5 10.5 12 3l8.5 7.5M5.5 9v11h13V9M9 20v-6h6v6"/></svg>;
 }
 
-function LogoutIcon() {
-  return <svg className="logout-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 5H5.5A1.5 1.5 0 0 0 4 6.5v11A1.5 1.5 0 0 0 5.5 19H10M14 8l4 4-4 4m4-4H9"/></svg>;
+function GlobeIcon() {
+  return <svg className="globe-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5C9.6 18.2 8.4 15.4 8.4 12S9.6 5.8 12 3.5Z"/></svg>;
 }
 
-function BrandMark() {
-  return <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-    <path d="M7 40.5h34M11.5 40V22.5a12.5 12.5 0 0 1 25 0V40" />
-    <path d="M18 40V28a6 6 0 0 1 12 0v12" />
-    <path d="M22 40v-8a2 2 0 0 1 4 0v8" />
-    <path d="m34 8 1.5-3 1.2 3 3.3 1.2-3.3 1.2-1.2 3-1.5-3-3-1.2 3-1.2Z" fill="currentColor" stroke="none" />
-  </svg>;
+function LogoutIcon() {
+  return <svg className="logout-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 5H5.5A1.5 1.5 0 0 0 4 6.5v11A1.5 1.5 0 0 0 5.5 19H10M14 8l4 4-4 4m4-4H9"/></svg>;
 }
